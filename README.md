@@ -2,7 +2,7 @@
 
 Remove NotebookLM watermarks from your slides instantly. 100% local processing — your files never leave your device.
 
-🔗 **Live Demo**: [https://aiinfogap.github.io/slideclean/](https://aiinfogap.github.io/slideclean/)
+🔗 **Live Demo**: [https://aaronyang-ai.github.io/slideclean/](https://aaronyang-ai.github.io/slideclean/)
 
 ![SlideClean Pro Screenshot](screenshot.png)
 
@@ -31,13 +31,13 @@ This approach preserves background gradients and textures better than traditiona
 
 ## Usage
 
-**Online**: Visit [aiinfogap.github.io/slideclean](https://aiinfogap.github.io/slideclean/)
+**Online**: Visit [aaronyang-ai.github.io/slideclean](https://aaronyang-ai.github.io/slideclean/)
 
 **Offline**: Download `index.html` and open it in any modern browser.
 
 ## License
 
-MIT © [AIInfoGap](https://github.com/AIInfoGap)
+MIT © [Aaron Yang](https://github.com/aaronyang-ai)
 
 ---
 
