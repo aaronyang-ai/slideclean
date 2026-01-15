@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlideClean Pro</title>
+    
+    <!-- Core Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+    
+    <!-- Fonts: Inter + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* Base color palette: minimal black/white/gray */
+            --bg-base: #050505;
+            --bg-surface: #0A0A0A;
+            --bg-card: #111111;
+            
+            --border-light: #262626;
+            --border-hover: #404040;
+            
+            --text-main: #EDEDED;
+            --text-muted: #888888;
+            --text-dim: #444444;
+            
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            /* Hide scrollbar but allow scrolling */
+            scrollbar-width: none; 
+        }
+        body::-webkit-scrollbar { display: none; }
+
+        /* --- Global noise texture --- */
+        .noise-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.04;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* --- Navigation bar --- */
+        header {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid var(--border-light);
+            background: rgba(5, 5, 5, 0.8);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-dot {
+            width: 8px; height: 8px;
+            background: var(--text-main);
+            border-radius: 1px;
+        }
+
+        .nav-links a {
+            font-size: 13px;
+            color: var(--text-muted);
+            text-decoration: none;
+            margin-left: 24px;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-main); }
+
+        /* --- Main container --- */
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 80px 24px 120px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 80px; /* Section spacing */
+        }
+
+        /* --- Hero Section --- */
+        .hero-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .hero-text {
+            text-align: center;
+            max-width: 600px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 500;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+            margin-bottom: 16px;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-desc {
+            font-size: 16px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* --- Spotlight upload component --- */
+        .spotlight-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            padding: 1px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px rgba(0,0,0,1), 0 20px 40px -20px rgba(0,0,0,0.5);
+        }
+
+        /* Dynamic lighting */
+        .spotlight-wrapper::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(
+                600px circle at var(--x, 50%) var(--y, 50%),
+                rgba(255, 255, 255, 0.1),
+                transparent 40%
+            );
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .spotlight-wrapper:hover::before { opacity: 1; }
+
+        .drop-zone {
+            position: relative;
+            height: 360px;
+            background: var(--bg-surface);
+            border-radius: 11px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            cursor: pointer;
+            /* Grid texture */
+            background-image: 
+                linear-gradient(var(--border-light) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border-light) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center center;
+        }
+
+        .drop-zone::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, transparent 20%, var(--bg-surface) 100%);
+            pointer-events: none;
+        }
+
+        /* State UI */
+        .ui-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: scale(0.98);
+            transition: all 0.4s var(--ease-out);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .ui-state.active {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+
+        .upload-icon {
+            width: 48px; height: 48px;
+            color: var(--text-dim);
+            margin-bottom: 24px;
+            transition: color 0.3s, transform 0.3s;
+        }
+        .drop-zone:hover .upload-icon {
+            color: var(--text-main);
+            transform: translateY(-4px);
+        }
+
+        .hint-main {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .hint-sub {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-dim);
+            background: rgba(255,255,255,0.05);
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        /* Processing animation */
+        .scan-line {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: var(--text-main);
+            box-shadow: 0 0 15px rgba(255,255,255,0.8);
+            animation: scan 1.5s ease-in-out infinite;
+            display: none;
+        }
+        .ui-state.active .scan-line { display: block; }
+        @keyframes scan {
+            0%, 100% { transform: translateY(0); opacity: 0; }
+            50% { transform: translateY(180px); opacity: 1; }
+        }
+
+        .log-container {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-muted);
+            width: 280px;
+            text-align: left;
+            margin-top: 32px;
+        }
+        .log-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 2px;
+            opacity: 0;
+            animation: fadeUp 0.3s forwards;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Success UI */
+        .file-card {
+            background: #151515;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+            width: 320px;
+        }
+        .file-type-icon {
+            width: 40px; height: 40px;
+            background: #222;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+        }
+        .btn {
+            height: 36px;
+            padding: 0 20px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: var(--text-main); color: black; }
+        .btn-primary:hover { background: white; transform: translateY(-1px); }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border-light); }
+        .btn-ghost:hover { border-color: var(--text-muted); color: var(--text-main); }
+
+
+        /* --- Features Grid (Bento Box) --- */
+        .grid-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .grid-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 240px;
+            transition: border-color 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .grid-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .grid-card h3 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .grid-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            max-width: 90%;
+        }
+
+        .card-visual {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 16px;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+        }
+        .grid-card:hover .card-visual { opacity: 0.8; }
+
+        /* Specific grid card styles */
+        .card-visual svg { width: 100%; height: 100%; max-height: 80px; }
+
+
+        /* --- Footer --- */
+        footer {
+            border-top: 1px solid var(--border-light);
+            padding: 40px 0;
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-content {
+            max-width: 1080px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .footer-links a {
+            color: var(--text-dim);
+            text-decoration: none;
+            margin-left: 20px;
+            cursor: pointer;
+        }
+        .footer-links a:hover { color: var(--text-muted); }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 36px; }
+            .grid-section { grid-template-columns: 1fr; }
+            .container { padding: 40px 20px; gap: 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="noise-layer"></div>
+
+    <header>
+        <div class="brand">
+            <div class="brand-dot"></div>
+            SLIDECLEAN PRO
+        </div>
+        <nav class="nav-links">
+            <a href="https://github.com/aaronyang-ai/slideclean" target="_blank">GitHub</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        
+        <!-- 1. Hero Area -->
+        <section class="hero-section">
+            <div class="hero-text">
+                <h1>Remove Watermarks<br>With Precision.</h1>
+                <p class="hero-desc">Engineered for NotebookLM slides. Local processing engine ensures your data never leaves your device.</p>
+            </div>
+
+            <div class="spotlight-wrapper" id="cardWrapper" style="--x: 625.5px; --y: 849.21875px;">
+                <div class="drop-zone" id="dropZone">
+                    <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg" style="display: none;">
+                    
+                    <!-- State 1: Idle -->
+                    <div class="ui-state active" id="stateIdle">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 16.5V3.5m0 0L7 8.5m5-5l5 5M4 19.5v1.5a2.5 2.5 0 002.5 2.5h11a2.5 2.5 0 002.5-2.5v-1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                        <div class="hint-main">Drag &amp; Drop File</div>
+                        <div class="hint-sub">PDF / IMAGE • MAX 50MB</div>
+                    </div>
+
+                    <!-- State 2: Processing -->
+                    <div class="ui-state" id="stateProcessing">
+                        <div class="scan-line"></div>
+                        <div style="font-family: var(--font-mono); font-size: 13px; margin-bottom: 8px;">PROCESSING_QUEUE</div>
+                        <div class="log-container" id="logContainer"></div>
+                    </div>
+
+                    <!-- State 3: Success -->
+                    <div class="ui-state" id="stateSuccess">
+                        <div class="file-card">
+                            <div class="file-type-icon" id="resIcon">PDF</div>
+                            <div style="flex:1">
+                                <div style="font-size: 13px; font-weight: 500; color: white;" id="resName">filename.pdf</div>
+                                <div style="font-size: 11px; color: var(--text-dim); font-family: var(--font-mono);" id="resSize">2.4 MB</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button class="btn btn-primary" id="downloadBtn">Download Clean File</button>
+                            <button class="btn btn-ghost" id="resetBtn">Reset</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Feature Grid -->
+        <section class="grid-section">
+            <div class="grid-card">
+                <div>
+                    <h3>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        Privacy Native
+                    </h3>
+                    <p>No servers. No uploads. The entire cleaning pipeline runs inside your browser using WebAssembly.</p>
+                </div>
+                <div class="card-visual">
+                    <!-- Simple privacy lock visualization -->
+                    <svg viewBox="0 0 100 60" fill="none" stroke="#333" stroke-width="1">
+                        <rect x="20" y="20" width="60" height="40" rx="4" fill="#111"></rect>
+                        <path d="M35 20V12a15 15 0 0 1 30 0v8"></path>
+                        <circle cx="50" cy="40" r="4" fill="#333"></circle>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="grid-card">
+                <div>
+                    <h3>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                        Lossless Engine
+                    </h3>
+                    <p>Smart pixel cloning algorithm only targets the watermark area, leaving your slide content 100% untouched.</p>
+                </div>
+                <div class="card-visual">
+                    <!-- Pixel block visualization -->
+                    <svg viewBox="0 0 100 60" fill="none">
+                        <rect x="20" y="15" width="15" height="15" fill="#222"></rect>
+                        <rect x="40" y="15" width="15" height="15" fill="#333"></rect>
+                        <rect x="60" y="15" width="15" height="15" fill="#222"></rect>
+                        <rect x="20" y="35" width="15" height="15" fill="#333"></rect>
+                        <rect x="40" y="35" width="15" height="15" fill="#444"></rect>
+                        <rect x="60" y="35" width="15" height="15" fill="#333"></rect>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="grid-card">
+                <div>
+                    <h3>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        Open Source
+                    </h3>
+                    <p>Transparent and free. View the source code on GitHub to verify how we handle your files.</p>
+                </div>
+                <div class="card-visual">
+                    <!-- Code lines visualization -->
+                    <svg viewBox="0 0 100 60" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round">
+                        <line x1="20" y1="15" x2="60" y2="15"></line>
+                        <line x1="20" y1="25" x2="80" y2="25"></line>
+                        <line x1="20" y1="35" x2="50" y2="35"></line>
+                        <line x1="20" y1="45" x2="70" y2="45"></line>
+                    </svg>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <div>© 2025 SlideClean Pro. MIT License.</div>
+            <div class="footer-links">
+                <!-- Download source code link -->
+                <a href="#" id="downloadSourceBtn">Download Source Code</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Elements
+        const wrapper = document.getElementById('cardWrapper');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const logContainer = document.getElementById('logContainer');
+
+        // States
+        const uiStates = {
+            idle: document.getElementById('stateIdle'),
+            processing: document.getElementById('stateProcessing'),
+            success: document.getElementById('stateSuccess')
+        };
+
+        // Data
+        let processedBlob = null;
+        let originalName = '';
+
+        // Spotlight Logic
+        document.addEventListener('mousemove', (e) => {
+            const rect = wrapper.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            wrapper.style.setProperty('--x', `${x}px`);
+            wrapper.style.setProperty('--y', `${y}px`);
+        });
+
+        // State Manager
+        function switchState(state) {
+            Object.values(uiStates).forEach(el => el.classList.remove('active'));
+            uiStates[state].classList.add('active');
+        }
+
+        function log(msg, status = 'OK') {
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = `<span>${msg}</span><span style="color:var(--text-main)">${status}</span>`;
+            logContainer.appendChild(div);
+            if (logContainer.children.length > 5) logContainer.removeChild(logContainer.firstChild);
+        }
+
+        // Event Listeners
+        dropZone.addEventListener('click', (e) => {
+            if (uiStates.idle.classList.contains('active')) fileInput.click();
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#444';
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '');
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '';
+            if (e.dataTransfer.files.length) start(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) start(e.target.files[0]);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.value = '';
+            switchState('idle');
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!processedBlob) return;
+            const url = URL.createObjectURL(processedBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${originalName}_clean.${processedBlob.type.includes('pdf')?'pdf':'png'}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // --- NEW: Self Download Feature ---
+        document.getElementById('downloadSourceBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            // Get the entire HTML of the current document
+            const htmlContent = document.documentElement.outerHTML;
+            // Add DOCTYPE because outerHTML doesn't include it
+            const fullHtml = '<!DOCTYPE html>\n' + htmlContent;
+            
+            const blob = new Blob([fullHtml], {type: 'text/html'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'slideclean_pro.html'; // The file name to save
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+
+        // Logic
+        const WM_CONFIG = {
+            widthRatio: 0.0825, heightRatio: 0.0375,
+            marginRightRatio: 0.0025, marginBottomRatio: 0.0027,
+            featherSize: 12
+        };
+
+        async function start(file) {
+            originalName = file.name.replace(/\.[^/.]+$/, '');
+            logContainer.innerHTML = '';
+            switchState('processing');
+
+            try {
+                log('Initializing Pipeline');
+                await new Promise(r => setTimeout(r, 600));
+
+                if (file.type === 'application/pdf') {
+                    await processPDF(file);
+                } else if (file.type.startsWith('image/')) {
+                    await processImage(file);
+                } else {
+                    throw new Error('Invalid file type');
+                }
+            } catch (err) {
+                alert(err.message);
+                switchState('idle');
+            }
+        }
+
+        async function processPDF(file) {
+            log('Parsing PDF Structure');
+            const data = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(data).promise;
+            const total = pdf.numPages;
+            
+            const { jsPDF } = window.jspdf;
+            let doc = null;
+
+            for (let i = 1; i <= total; i++) {
+                log(`Rendering Page ${i}/${total}`);
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2 });
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                removeWatermark(ctx, canvas.width, canvas.height);
+
+                const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                
+                if (i === 1) {
+                    doc = new jsPDF({
+                        orientation: viewport.width > viewport.height ? 'l' : 'p',
+                        unit: 'px',
+                        format: [viewport.width, viewport.height]
+                    });
+                } else {
+                    doc.addPage([viewport.width, viewport.height], viewport.width > viewport.height ? 'l' : 'p');
+                }
+                doc.addImage(imgData, 'JPEG', 0, 0, viewport.width, viewport.height);
+            }
+
+            log('Packing Final Document', 'DONE');
+            processedBlob = doc.output('blob');
+            updateSuccessUI(file.size, 'PDF');
+        }
+
+        async function processImage(file) {
+            log('Decoding Image Data');
+            const img = await new Promise((resolve) => {
+                const i = new Image();
+                i.onload = () => resolve(i);
+                i.src = URL.createObjectURL(file);
+            });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            log('Patching Watermark Area');
+            removeWatermark(ctx, canvas.width, canvas.height);
+
+            processedBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+            updateSuccessUI(file.size, 'PNG');
+        }
+
+        function removeWatermark(ctx, w, h) {
+            const wmW = Math.round(w * WM_CONFIG.widthRatio);
+            const wmH = Math.round(h * WM_CONFIG.heightRatio);
+            const mr = Math.round(w * WM_CONFIG.marginRightRatio);
+            const mb = Math.round(h * WM_CONFIG.marginBottomRatio);
+            
+            const x = w - wmW - mr;
+            const y = h - wmH - mb;
+            const srcY = Math.max(0, y - wmH);
+            
+            if (srcY < 0) return;
+
+            const src = ctx.getImageData(x, srcY, wmW, wmH);
+            const dst = ctx.getImageData(x, y, wmW, wmH);
+            const res = ctx.createImageData(wmW, wmH);
+            
+            for (let i = 0; i < wmH; i++) {
+                for (let j = 0; j < wmW; j++) {
+                    const idx = (i * wmW + j) * 4;
+                    let a = 1.0;
+                    if (i < 12) a = Math.min(a, i/12);
+                    if (j < 12) a = Math.min(a, j/12);
+                    
+                    for (let c = 0; c < 4; c++) {
+                        res.data[idx+c] = Math.round(dst.data[idx+c]*(1-a) + src.data[idx+c]*a);
+                    }
+                }
+            }
+            ctx.putImageData(res, x, y);
+        }
+
+        function updateSuccessUI(size, type) {
+            setTimeout(() => {
+                document.getElementById('resName').innerText = `${originalName}_clean.${type.toLowerCase()}`;
+                document.getElementById('resSize').innerText = (processedBlob.size/1024/1024).toFixed(2) + ' MB';
+                document.getElementById('resIcon').innerText = type;
+                switchState('success');
+            }, 600);
+        }
+    </script>
+
+</body></html>
